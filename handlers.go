@@ -7,6 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -41,17 +45,38 @@ const (
 	TypeChange = "change"
 )
 
+// ImageInfo describes an image
+type ImageInfo struct {
+	Height int `json:"height"`
+	Width  int `json:"width"`
+	Size   int `json:"num_bytes"`
+}
+
 // ThickResponse describes response for /thick/:idx
 type ThickResponse struct {
 	BeforePath *string `json:"a"`
 	AfterPath  *string `json:"b"`
-	IsImage    bool    `json:"is_image_diff"`
 	NoChanges  bool    `json:"no_changes"`
 	// Type is "add", "delete", "move", "change"
-	Type          string `json:"type"`
-	Index         int    `json:"idx"`
+	Type    string `json:"type"`
+	Index   int    `json:"idx"`
+	IsImage bool   `json:"is_image_diff"`
+	// only present if IsImage is true
+	ImageA        *ImageInfo `json:"image_a"`
+	ImageB        *ImageInfo `json:"image_b"`
 	contentBefore []byte
 	contentAfter  []byte
+}
+
+// GetPath returns one of the paths
+func (tr *ThickResponse) GetPath() string {
+	if tr.BeforePath != nil {
+		return *tr.BeforePath
+	}
+	if tr.AfterPath != nil {
+		return *tr.AfterPath
+	}
+	return ""
 }
 
 func gitChangeTypeToThickResponseType(typ int) string {
@@ -93,6 +118,36 @@ func capFileSize(d []byte) []byte {
 	return d
 }
 
+func getImageInfo(d []byte) *ImageInfo {
+	if len(d) == 0 {
+		return nil
+	}
+	var res ImageInfo
+	r := bytes.NewReader(d)
+	i, _, err := image.Decode(r)
+	if err != nil {
+		LogErrorf("image.Decode failed with '%s'\n", err)
+		return nil
+	}
+	res.Size = len(d)
+	res.Width = i.Bounds().Dx()
+	res.Height = i.Bounds().Dy()
+	return &res
+}
+
+func thickResponseCommon(res *ThickResponse) ThickResponse {
+	res.IsImage = isImageFile(res.GetPath())
+	res.NoChanges = bytes.Equal(res.contentBefore, res.contentAfter)
+	if !res.IsImage {
+		res.contentBefore = capFileSize(res.contentBefore)
+		res.contentAfter = capFileSize(res.contentAfter)
+		return *res
+	}
+	res.ImageA = getImageInfo(res.contentBefore)
+	res.ImageB = getImageInfo(res.contentAfter)
+	return *res
+}
+
 // ThickResponseFromGitChange creates ThickResponse out of GitChange
 func ThickResponseFromGitChange(c *GitChange) ThickResponse {
 	var res ThickResponse
@@ -124,11 +179,7 @@ func ThickResponseFromGitChange(c *GitChange) ThickResponse {
 		res.contentBefore = nil
 		res.contentAfter = readFileMust(c.PathAfter)
 	}
-	res.contentBefore = capFileSize(res.contentBefore)
-	res.contentAfter = capFileSize(res.contentAfter)
-	res.IsImage = isImageFile(c.GetPath())
-	res.NoChanges = bytes.Equal(res.contentBefore, res.contentAfter)
-	return res
+	return thickResponseCommon(&res)
 }
 
 // ThickResponseFromDirDiffs creates ThickResponse out of GitChange
@@ -162,11 +213,7 @@ func ThickResponseFromDirDiffs(c *GitChange) ThickResponse {
 		res.contentBefore = nil
 		res.contentAfter = readFileMust(c.PathAfter)
 	}
-	res.contentBefore = capFileSize(res.contentBefore)
-	res.contentAfter = capFileSize(res.contentAfter)
-	res.IsImage = isImageFile(c.GetPath())
-	res.NoChanges = bytes.Equal(res.contentBefore, res.contentAfter)
-	return res
+	return thickResponseCommon(&res)
 }
 
 func buildGlobalChanges(changes []*GitChange) {
@@ -438,6 +485,24 @@ func findByPath(path string) *ThickResponse {
 	return nil
 }
 
+func findByPath2(path string) *ThickResponse {
+	path = strings.ToLower(path)
+	mu.Lock()
+	defer mu.Unlock()
+	var p string
+	for _, gc := range globalChanges {
+		p = strPtrToLower(gc.BeforePath)
+		if strings.HasSuffix(p, path) {
+			return &gc.ThickResponse
+		}
+		p = strPtrToLower(gc.AfterPath)
+		if strings.HasSuffix(p, path) {
+			return &gc.ThickResponse
+		}
+	}
+	return nil
+}
+
 func handleGetContents(w http.ResponseWriter, r *http.Request, which string) {
 	path := r.FormValue("path")
 	LogVerbosef("/%s/get_contents, path='%s'\n", which, path)
@@ -469,6 +534,39 @@ func handdleGetContentsB(w http.ResponseWriter, r *http.Request) {
 	handleGetContents(w, r, "b")
 }
 
+func handleGetFile(w http.ResponseWriter, r *http.Request, which string) {
+	uri := r.URL.Path
+	path := r.URL.Path[3:]
+	LogVerbosef("%s, which='%s' path='%s'\n", uri, which, path)
+	tr := findByPath2(path)
+	if tr == nil {
+		LogErrorf("%s not found\n", uri)
+		http.NotFound(w, r)
+		return
+	}
+	var d []byte
+	if which == "a" {
+		d = tr.contentBefore
+	} else {
+		d = tr.contentAfter
+	}
+	mime := MimeTypeByExtensionExt(path)
+	// application/json confuses front-end because jQuery ajax
+	// automatically translate those to objects
+	if mime == "application/json" || mime == "application/javascript" {
+		mime = "text/plain"
+	}
+	httpOkBytesWithContentType(w, r, mime, d)
+}
+
+func handleGetFileA(w http.ResponseWriter, r *http.Request) {
+	handleGetFile(w, r, "a")
+}
+
+func handleGetFileB(w http.ResponseWriter, r *http.Request) {
+	handleGetFile(w, r, "b")
+}
+
 func handleKill(w http.ResponseWriter, r *http.Request) {
 	LogVerbosef("handleKill, url: '%s'\n", r.URL.Path)
 	os.Exit(0)
@@ -479,6 +577,8 @@ func registerHandlers() {
 	http.HandleFunc("/thick/", handleThick)
 	http.HandleFunc("/a/get_contents", handdleGetContentsA)
 	http.HandleFunc("/b/get_contents", handdleGetContentsB)
+	http.HandleFunc("/a/", handleGetFileA)
+	http.HandleFunc("/b/", handleGetFileB)
 	http.HandleFunc("/kill", handleKill)
 }
 

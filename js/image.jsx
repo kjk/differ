@@ -14,8 +14,24 @@ export var PDIFF_MODE = {
   PIXELS: 2
 };
 
-
 export var IMAGE_DIFF_MODES = ['side-by-side', 'blink', 'onion-skin', 'swipe'];
+
+// A "no changes" sign which only appears when applicable.
+export var NoChanges = React.createClass({
+  propTypes: {
+    filePair: React.PropTypes.object.isRequired
+  },
+  render: function() {
+    var fp = this.props.filePair;
+    if (fp.no_changes) {
+      return <div className="no-changes">(File content is identical)</div>;
+    } else if (fp.is_image_diff && fp.are_same_pixels) {
+      return <div className="no-changes">Pixels are the same, though file content differs (perhaps the headers are different?)</div>;
+    } else {
+      return null;
+    }
+  }
+});
 
 // A widget to toggle between image diff modes (blink or side-by-side).
 export var ImageDiffModeSelector = React.createClass({

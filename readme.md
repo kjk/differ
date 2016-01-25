@@ -43,8 +43,8 @@ Build steps:
 
 * `git scdiff` support
 * refresh the diff on / reload and on "focus" event on window
-* support for diffing images
 * -share option that sends data to central server for sharing with other people
+* support for perceptual diffs
 * native mac app
 * native windows app
 * try more random port numbers if can't bind to the default

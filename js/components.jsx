@@ -7,7 +7,7 @@
 import React from 'react';
 import ReactRouter from 'react-router';
 
-import { ImageDiff, PDIFF_MODE, IMAGE_DIFF_MODES } from './image.jsx';
+import { NoChanges, ImageDiff, PDIFF_MODE, IMAGE_DIFF_MODES } from './image.jsx';
 import { filePairDisplayName, isSameSizeImagePair } from './util.js';
 
 // Webdiff application root.
@@ -259,23 +259,6 @@ var DiffView = React.createClass({
       return <ImageDiff filePair={filePair} {...this.props} />;
     } else {
       return <CodeDiff filePair={filePair} />;
-    }
-  }
-});
-
-// A "no changes" sign which only appears when applicable.
-var NoChanges = React.createClass({
-  propTypes: {
-    filePair: React.PropTypes.object.isRequired
-  },
-  render: function() {
-    var fp = this.props.filePair;
-    if (fp.no_changes) {
-      return <div className="no-changes">(File content is identical)</div>;
-    } else if (fp.is_image_diff && fp.are_same_pixels) {
-      return <div className="no-changes">Pixels are the same, though file content differs (perhaps the headers are different?)</div>;
-    } else {
-      return null;
     }
   }
 });
