@@ -7,3 +7,5 @@ This is how webdiff implements `git webdiff` (has `git-webdiff`
 wrapper scripts that invokes `webdiff` proper).
 
 Not sure what the exact protocol between git and the executable is.
+
+More notes.
