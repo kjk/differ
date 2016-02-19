@@ -58,32 +58,38 @@ func catGitHeadToFileMust(dst, gitPath string) {
 	fataliferr(err)
 }
 
+/* parse line in the form:
+M simplenote.go
+*/
 func parseGitStatusLineMust(s string) *GitChange {
 	c := &GitChange{}
 	parts := strings.SplitN(s, " ", 2)
 	fatalif(len(parts) != 2, "invalid line: '%s'\n", s)
+	path := strings.TrimSpace(parts[1])
 	switch parts[0] {
 	case "M":
 		c.Type = Modified
+		c.PathBefore = path
+		c.PathAfter = path
 	case "A":
 		c.Type = Added
+		c.PathAfter = path
 	case "D":
 		c.Type = Deleted
+		c.PathBefore = path
 	case "??":
 		c.Type = NotCheckedIn
-		c.PathAfter = strings.TrimSpace(parts[1])
+		c.PathAfter = path
 	case "R":
 		c.Type = Renamed
 		// www/static/js/file_diff.js -> js/file_diff.js
-		paths := strings.SplitN(parts[1], " -> ", 2)
+		paths := strings.SplitN(path, " -> ", 2)
 		fatalif(len(paths) != 2, "invalid line: '%s'\n", s)
 		c.PathBefore = strings.TrimSpace(paths[0])
 		c.PathAfter = strings.TrimSpace(paths[1])
-		return c
 	default:
 		fatalif(true, "invalid line: '%s'\n", s)
 	}
-	c.PathBefore = strings.TrimSpace(parts[1])
 	return c
 }
 
