@@ -20,14 +20,14 @@ var (
 	gitTypeNames = []string{"Modified", "Added", "Deleted", "Renamed", "NotCheckedIn"}
 )
 
-// FileChange describes
+// GitChange describes
 type GitChange struct {
 	PathBefore string
 	PathAfter  string // only for Renamed
 	Type       int    // Modified, Added etc.
 }
 
-// GetPath() returns first valid path
+// GetPath returns first valid path
 func (c *GitChange) GetPath() string {
 	if c.PathBefore != "" {
 		return c.PathBefore
@@ -35,8 +35,9 @@ func (c *GitChange) GetPath() string {
 	return c.PathAfter
 }
 
+// GetName returns base name of the file
 func (c *GitChange) GetName() string {
-	return filepath.Base(c.PathBefore)
+	return filepath.Base(c.GetPath())
 }
 
 var (
@@ -70,13 +71,14 @@ func parseGitStatusLineMust(s string) *GitChange {
 		c.Type = Deleted
 	case "??":
 		c.Type = NotCheckedIn
+		c.PathAfter = strings.TrimSpace(parts[1])
 	case "R":
 		c.Type = Renamed
 		// www/static/js/file_diff.js -> js/file_diff.js
-		parts = strings.SplitN(parts[1], " -> ", 2)
-		fatalif(len(parts) != 2, "invalid line: '%s'\n", s)
-		c.PathBefore = strings.TrimSpace(parts[0])
-		c.PathAfter = strings.TrimSpace(parts[1])
+		paths := strings.SplitN(parts[1], " -> ", 2)
+		fatalif(len(paths) != 2, "invalid line: '%s'\n", s)
+		c.PathBefore = strings.TrimSpace(paths[0])
+		c.PathAfter = strings.TrimSpace(paths[1])
 		return c
 	default:
 		fatalif(true, "invalid line: '%s'\n", s)

@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	flgDev bool
+	flgVerbose bool
 )
 
 // Change combines a GitChange and corresponding server response
@@ -58,13 +58,13 @@ func gitStatusExpandDirs(changes []*GitChange) []*GitChange {
 }
 
 func parseFlags() {
-	flag.BoolVar(&flgDev, "dev", false, "running in dev mode")
+	flag.BoolVar(&flgVerbose, "verbose", false, "be verbose (for debugging)")
 	flag.Parse()
 }
 
 func main() {
 	parseFlags()
-	if flgDev {
+	if flgVerbose {
 		verboseLogging = true
 	}
 
